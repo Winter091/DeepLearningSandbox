@@ -116,10 +116,10 @@ float Model::GetMSELoss(const Pool& pool) const
     float loss = 0.0f;
 
     for (const PoolElement& element : pool.GetElements()) {
-        const auto& solution = Apply(element.Pixels);
+        const auto& solution = Apply(element.Features);
         std::vector<float> properSolution(solution.size(), 0.0f);
-        properSolution[element.Label] = 1.0f;
-        
+        properSolution[element.Target] = 1.0f;
+
         loss += lossFunc(solution, properSolution);
     }
 

@@ -9,22 +9,22 @@ int main()
 {
     Pool trainPool("Resources/Mnist/train-images", "Resources/Mnist/train-labels");
     Pool testPool("Resources/Mnist/test-images", "Resources/Mnist/test-labels");
-    int numPixels = trainPool.GetElements()[0].Pixels.size();
+    int numFeatures = trainPool.GetElements()[0].Features.size();
 
     Model model;
-    model.SetInputSize(numPixels);
+    model.SetInputSize(numFeatures);
     model.AddLayer(16);
     model.AddLayer(16);
     model.AddLayer(10);
 
-    auto input = trainPool.GetElements()[0].Pixels;
+    auto input = trainPool.GetElements()[0].Features;
     std::vector<float> res = model.Apply(input);
     for (float elem : res) {
         printf("%.2f ", elem);
     }
     printf("\n");
 
-    printf("MSE loss: %.2f\n", model.GetMSELoss(trainPool));
+    printf("MSE loss: %.2f\n", model.GetMSELoss(testPool));
 
     LayerToBmps(model.GetLayer(0), "Resources/Visualizations");
 

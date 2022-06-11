@@ -7,8 +7,8 @@
 
 struct PoolElement
 {
-    uint8_t Label;
-    std::vector<float> Pixels;
+    uint8_t Target;
+    std::vector<float> Features;
 };  
 
 

@@ -34,9 +34,9 @@ void Pool::ParseLabelsFile(const char* labelsFile)
     m_elements.resize(poolSize);
 
     for (int i = 0; i < poolSize; i++) {
-        uint8_t label;
-        fread(&label, 1, 1, file);
-        m_elements[i].Label = label;
+        uint8_t target;
+        fread(&target, 1, 1, file);
+        m_elements[i].Target = target;
     }
 }
 
@@ -72,12 +72,12 @@ void Pool::ParseImagesFile(const char* imagesFile)
     uint32_t pixelsPerImage = rows * cols;
 
     for (auto& currElem : m_elements) {
-        currElem.Pixels.resize(pixelsPerImage);
+        currElem.Features.resize(pixelsPerImage);
 
         for (int i = 0; i < pixelsPerImage; i++) {
             uint8_t pixel;
             fread(&pixel, 1, 1, file);
-            currElem.Pixels[i] = (pixel / 255.0f);
+            currElem.Features[i] = (pixel / 255.0f);
         }
     }
 }
