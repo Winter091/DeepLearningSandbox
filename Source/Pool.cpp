@@ -2,6 +2,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <unordered_set>
+#include <random>
 
 
 class FileDescriptor
@@ -28,6 +30,31 @@ Pool::Pool(const char* imagesFile, const char* labelsFile)
 {
     ParseImagesFile(imagesFile);
     ParseLabelsFile(labelsFile);
+}
+
+
+Pool Pool::TakeRandom(std::size_t amount) const
+{
+    std::vector<PoolElement> elements;
+    std::unordered_set<uint32_t> takenElements;
+
+    std::random_device os_seed;
+    const uint32_t seed = os_seed();
+
+    std::mt19937_64 generator(seed);
+    std::uniform_int_distribution<uint32_t> random(0, std::numeric_limits<std::uint32_t>::max());
+
+    while (elements.size() != amount) {
+        uint32_t i = random(generator) % m_elements.size();
+        if (takenElements.find(i) != takenElements.end()) {
+            continue;
+        }
+
+        takenElements.insert(i);
+        elements.push_back(m_elements[i]);
+    }
+
+    return Pool(std::move(elements));
 }
 
 

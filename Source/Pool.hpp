@@ -17,8 +17,15 @@ class Pool
 public:
     Pool(const char* imagesFile, const char* labelsFile);
 
+    template <typename T>
+    Pool(T&& elements)
+        : m_elements(std::forward<T>(elements))
+    {}
+
     std::size_t GetSize() const { return m_size; }
     const std::vector<PoolElement>& GetElements() const { return m_elements; }
+
+    Pool TakeRandom(std::size_t amount) const;
 
 private:
     std::size_t m_size = 0;

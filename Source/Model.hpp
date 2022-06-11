@@ -9,6 +9,13 @@
 #include "Pool.hpp"
 
 
+struct LearnParams
+{
+    std::size_t NumIters;
+    std::size_t BatchSize;
+};
+
+
 struct ModelLayer
 {
     std::size_t Size;
@@ -28,6 +35,21 @@ struct ModelLayer
 };
 
 
+struct LayerLearnData
+{
+    std::size_t LayerSize;
+    std::vector<float> Z;
+    std::vector<float> A;
+};
+
+
+struct ModelLearnData
+{
+    std::uint8_t target;
+    std::vector<LayerLearnData> LayerDatas;
+};
+
+
 class Model
 {
 public:
@@ -39,6 +61,8 @@ public:
     const ModelLayer& GetLayer(std::size_t index) const;
     
     std::vector<float> Apply(const std::vector<float>& input) const;
+
+    void Fit(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
 
     float GetMSELoss(const Pool& pool) const;
 
@@ -53,6 +77,18 @@ private:
 
 private:
     void AddLayerImpl(std::size_t size, std::size_t prevLayerSize);
+
+    void DoLearnIteration(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
+    ModelLearnData ApplyForLearn(const std::vector<float> input);
+    std::vector<std::vector<float>> ComputeErrors(const ModelLearnData& data) const;
+
+    std::vector<float> ComputeOutputLayerErrors(const ModelLearnData& data) const;
+    std::vector<std::vector<float>> ComputePrevLayersErrors(
+        const ModelLearnData& data, 
+        const std::vector<float>& resultLayerErrors
+    ) const;
+
+    std::vector<ModelLayer> ComputeGradient(const ModelLearnData& data, const std::vector<std::vector<float>>& layerErrors) const;
 };
 
 
