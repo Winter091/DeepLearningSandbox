@@ -4,6 +4,26 @@
 #include <cstdlib>
 
 
+class FileDescriptor
+{
+public:
+    FileDescriptor(const char* path, const char* mode) 
+    { 
+        m_file = fopen(path, mode);
+        if (!m_file) {
+            fprintf(stderr, "Unable to open file: %s\n", path);
+            exit(EXIT_FAILURE);
+        }
+    }
+    ~FileDescriptor() { fclose(m_file); }
+
+    FILE* Get() { return m_file; }
+
+private:
+    FILE* m_file;
+};
+
+
 Pool::Pool(const char* imagesFile, const char* labelsFile)
 {
     ParseImagesFile(imagesFile);
@@ -13,11 +33,8 @@ Pool::Pool(const char* imagesFile, const char* labelsFile)
 
 void Pool::ParseLabelsFile(const char* labelsFile)
 {
-    FILE* file = fopen(labelsFile, "rb");
-    if (!file) {
-        fprintf(stderr, "Unable to open labels file: %s\n", labelsFile);
-        exit(EXIT_FAILURE);
-    }
+    FileDescriptor fileDescriptor(labelsFile, "rb");
+    FILE* file = fileDescriptor.Get();
 
     fseek(file, 4, SEEK_SET);
 
@@ -33,21 +50,19 @@ void Pool::ParseLabelsFile(const char* labelsFile)
     m_size = poolSize;
     m_elements.resize(poolSize);
 
+    std::vector<uint8_t> targets(poolSize);
+    fread(&targets[0], targets.size(), 1, file);
+
     for (int i = 0; i < poolSize; i++) {
-        uint8_t target;
-        fread(&target, 1, 1, file);
-        m_elements[i].Target = target;
+        m_elements[i].Target = targets[i];
     }
 }
 
 
 void Pool::ParseImagesFile(const char* imagesFile)
 {
-    FILE* file = fopen(imagesFile, "rb");
-    if (!file) {
-        fprintf(stderr, "Unable to open images file: %s\n", imagesFile);
-        exit(EXIT_FAILURE);
-    }
+    FileDescriptor fileDescriptor(imagesFile, "rb");
+    FILE* file = fileDescriptor.Get();
 
     fseek(file, 4, SEEK_SET);
 
@@ -71,13 +86,16 @@ void Pool::ParseImagesFile(const char* imagesFile)
 
     uint32_t pixelsPerImage = rows * cols;
 
-    for (auto& currElem : m_elements) {
+    std::vector<uint8_t> pixelsData(poolSize * pixelsPerImage);
+    fread(&pixelsData[0], pixelsData.size(), 1, file);
+
+    for (int i = 0; i < poolSize; i++) {
+        auto& currElem = m_elements[i];
         currElem.Features.resize(pixelsPerImage);
 
-        for (int i = 0; i < pixelsPerImage; i++) {
-            uint8_t pixel;
-            fread(&pixel, 1, 1, file);
-            currElem.Features[i] = (pixel / 255.0f);
+        for (int j = 0; j < pixelsPerImage; j++) {
+            uint8_t pixel = pixelsData[i * pixelsPerImage + j];
+            currElem.Features[j] = (pixel / 255.0f);
         }
     }
 }
