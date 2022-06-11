@@ -19,7 +19,7 @@ static void CreateBmp(const ModelLayer& layer, std::size_t index, const std::str
         int x = i % width;
         int y = i / width;
 
-        float weight = layer.Weights[i][index];
+        float weight = layer.WeightAt(i, index);
         float coeff = std::abs(weight) / 2.0f;
         int r = 0, g = 0, b = 0;
         if (weight < 0) {

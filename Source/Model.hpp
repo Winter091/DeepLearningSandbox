@@ -9,27 +9,22 @@
 #include "Pool.hpp"
 
 
-template <typename T>
-using Matrix = std::vector<std::vector<T>>;
-
-
 struct ModelLayer
 {
     std::size_t Size;
     std::size_t PrevLayerSize;
-    Matrix<float> Weights;
+    std::vector<float> Weights;
     std::vector<float> Biases;
 
     ModelLayer(std::size_t size, std::size_t prevLayerSize)
         : Size(size)
         , PrevLayerSize(prevLayerSize)
-        , Weights(prevLayerSize)
+        , Weights(prevLayerSize * size, 0.0f)
         , Biases(size, 0.0f)
-    {
-        for (auto& vec : Weights) {
-            vec.resize(Size, 0.0f);
-        }
-    }
+    {}
+
+    float& WeightAt(std::size_t i, std::size_t j) { return Weights[i * Size + j]; }
+    const float& WeightAt(std::size_t i, std::size_t j) const { return Weights[i * Size + j]; }
 };
 
 

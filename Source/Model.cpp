@@ -36,7 +36,7 @@ void Model::AddLayerImpl(std::size_t size, std::size_t prevLayerSize)
 
     for (std::size_t i = 0; i < prevLayerSize; i++) {        
         for (std::size_t j = 0; j < size; j++) {
-            layer.Weights[i][j] = m_random(m_e2);
+            layer.WeightAt(i, j) = m_random(m_e2);
         }
     }
 
@@ -75,7 +75,7 @@ std::vector<float> Model::Apply(const std::vector<float>& input) const
 
         for (int i = 0; i < layer.PrevLayerSize; i++) {
             for (int j = 0; j < layer.Size; j++) {
-                currResults[j] += (prevLayerResults[i] * layer.Weights[i][j]);
+                currResults[j] += (prevLayerResults[i] * layer.WeightAt(i, j));
             }
         }
 
