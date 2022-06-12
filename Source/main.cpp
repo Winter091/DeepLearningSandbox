@@ -17,6 +17,8 @@ int main()
     model.AddLayer(16);
     model.AddLayer(10);
 
+    ModelVisualizer::DumpLayerToBmps(model.GetLayer(0), "Resources/Visualizations");
+
     auto input = testPool.GetElements()[0].Features;
     std::vector<float> res = model.Apply(input);
     for (float elem : res) {
