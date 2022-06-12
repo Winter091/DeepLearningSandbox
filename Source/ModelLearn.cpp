@@ -16,7 +16,8 @@ void ModelLearn::Fit(const Pool& learnPool, const Pool& testPool, const LearnPar
 }
 
 
-void ModelLearn::DoLearnIteration(const Pool& learnPool, const Pool& testPool, const LearnParams& params)
+void ModelLearn::DoLearnIteration(
+    const Pool& learnPool, const Pool& testPool, const LearnParams& params)
 {
     // Create batch to learn on
     // Apply model, remembering z^l and a^l
@@ -25,24 +26,22 @@ void ModelLearn::DoLearnIteration(const Pool& learnPool, const Pool& testPool, c
     // Having errors, compute gradient vector
 
     Pool batchLearnPool = learnPool.TakeRandom(params.BatchSize);
+    ModelGradient avgGradient;
 
-    std::vector<ModelLayer> batchGradient;
+    for (const auto& element : batchLearnPool.GetElements()) {
+        ModelActivations activations = ComputeActivations(element.Features);
 
-    for (const auto& record : batchLearnPool.GetElements()) {
-        ModelLearnData data = ApplyForLearn(record.Features);
-        data.target = record.Target;
+        Matrix<float> errors = ComputeErrors(activations, element.Target);
 
-        auto layerErrors = ComputeErrors(data);
-
-        std::vector<ModelLayer> gradient = ComputeGradient(data, layerErrors);
-        if (batchGradient.empty()) {
-            batchGradient = std::move(gradient);
+        ModelGradient gradient = ComputeGradient(activations, errors);
+        if (avgGradient.Layers.empty()) {
+            avgGradient = std::move(gradient);
             continue;
         }
         
-        for (int layerNum = 0; layerNum < gradient.size(); layerNum++) {
-            auto& resLayer = batchGradient[layerNum];
-            auto& thisLayer = gradient[layerNum];
+        for (int layerNum = 0; layerNum < gradient.Layers.size(); layerNum++) {
+            auto& resLayer = avgGradient.Layers[layerNum];
+            auto& thisLayer = gradient.Layers[layerNum];
 
             for (int i = 0; i < thisLayer.Biases.size(); i++) {
                 resLayer.Biases[i] += thisLayer.Biases[i];
@@ -54,17 +53,8 @@ void ModelLearn::DoLearnIteration(const Pool& learnPool, const Pool& testPool, c
         }
     }
 
-    for (int i = 0; i < batchGradient.size(); i++) {
-        //printf("\tLayer #%d:\tBiases:\n", i);
-        auto& layer = batchGradient[i];
-
-        for (int j = 0; j < layer.Biases.size(); j++) {
-            //printf("\t%.3f ", layer.Biases[j]);
-        }
-    }
-
-    for (int layerNum = 0; layerNum < batchGradient.size(); layerNum++) {
-        auto& layer = batchGradient[layerNum];
+    for (int layerNum = 0; layerNum < avgGradient.Layers.size(); layerNum++) {
+        auto& layer = avgGradient.Layers[layerNum];
 
         for (int i = 0; i < layer.Biases.size(); i++) {
             layer.Biases[i] /= params.BatchSize;
@@ -75,11 +65,9 @@ void ModelLearn::DoLearnIteration(const Pool& learnPool, const Pool& testPool, c
         }
     }
 
-    // batchIteration now contains gradient!
-
     // Apply antigradient
-    for (int layerNum = 0; layerNum < batchGradient.size(); layerNum++) {
-        auto& gradientLayer = batchGradient[layerNum];
+    for (int layerNum = 0; layerNum < avgGradient.Layers.size(); layerNum++) {
+        auto& gradientLayer = avgGradient.Layers[layerNum];
         auto& modelLayer = m_model.m_layers[layerNum];
 
         for (int i = 0; i < modelLayer.Biases.size(); i++) {
@@ -93,50 +81,20 @@ void ModelLearn::DoLearnIteration(const Pool& learnPool, const Pool& testPool, c
 }
 
 
-std::vector<std::vector<float>> ModelLearn::ComputeErrors(const ModelLearnData& data) const
+Matrix<float> ModelLearn::ComputeErrors(
+    const ModelActivations& activations, uint8_t target) const
 {
-    std::vector<float> resultLayerErrors = ComputeOutputLayerErrors(data);
-    std::vector<std::vector<float>> layersErrors = ComputePrevLayersErrors(data, resultLayerErrors);
-
-    return layersErrors;
-}
-
-
-std::vector<float> ModelLearn::ComputeOutputLayerErrors(const ModelLearnData& data) const
-{
-    std::vector<float> errors(m_model.m_layers.back().Size, 0.0f);
-
-    std::vector<float> properSol(errors.size(), 0.0f);
-    properSol[data.target] = 1.0f;
-
-    auto sigmoidDerivative = [](float x) -> float {
-        return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
-    };
-
-    for (int i = 0; i < errors.size(); i++) {
-        float a = data.LayerDatas.back().A[i];
-        float y = properSol[i];
-        float z = data.LayerDatas.back().Z[i];
-        errors[i] = (2.0f * (a - y)) * sigmoidDerivative(z);
-    }
-
-    return errors;
-}
-
-
-std::vector<std::vector<float>> ModelLearn::ComputePrevLayersErrors(
-    const ModelLearnData& data, 
-    const std::vector<float>& resultLayerErrors) const 
-{
-    std::vector<std::vector<float>> result;
+    Matrix<float> result;
     result.reserve(m_model.m_layers.size());
-    result.push_back(resultLayerErrors);
+
+    std::vector<float> outputLayerErrors = ComputeOutputLayerErrors(activations, target);
+    result.push_back(std::move(outputLayerErrors));
 
     auto sigmoidDerivative = [](float x) -> float {
         return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
     };
 
-    const std::vector<float>* nextLayerErrors = &resultLayerErrors;
+    const std::vector<float>* nextLayerErrors = &outputLayerErrors;
     for (int i = m_model.m_layers.size() - 2; i >= 0; i--) {
 
         auto& nextLayer = m_model.m_layers[i + 1];
@@ -151,9 +109,8 @@ std::vector<std::vector<float>> ModelLearn::ComputePrevLayersErrors(
             }
 
             // i + 1 because input layer is also stored in LayerDatas
-            float z = data.LayerDatas[i + 1].Z[j];
+            float z = activations.Layers[i + 1].PreActivations[j];
             currLayerErrors[j] = sigmoidDerivative(z) * sum;
-
         }
 
         result.push_back(std::move(currLayerErrors));
@@ -161,7 +118,7 @@ std::vector<std::vector<float>> ModelLearn::ComputePrevLayersErrors(
 
     }
 
-    std::vector<std::vector<float>> reversedResult;
+    Matrix<float> reversedResult;
     reversedResult.reserve(result.size());
     for (int i = 0; i < result.size(); i++) {
         std::vector<float> a = std::move(result[result.size() - 1 - i]);
@@ -169,10 +126,33 @@ std::vector<std::vector<float>> ModelLearn::ComputePrevLayersErrors(
     }
 
     return reversedResult;
-};
+}
 
 
-ModelLearnData ModelLearn::ApplyForLearn(const std::vector<float> input)
+std::vector<float> ModelLearn::ComputeOutputLayerErrors(
+    const ModelActivations& data, uint8_t target) const
+{
+    std::vector<float> errors(m_model.m_layers.back().Size, 0.0f);
+
+    std::vector<float> correctSolution(errors.size(), 0.0f);
+    correctSolution[target] = 1.0f;
+
+    auto sigmoidDerivative = [](float x) -> float {
+        return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
+    };
+
+    for (int i = 0; i < errors.size(); i++) {
+        float a = data.Layers.back().Activations[i];
+        float y = correctSolution[i];
+        float z = data.Layers.back().PreActivations[i];
+        errors[i] = (2.0f * (a - y)) * sigmoidDerivative(z);
+    }
+
+    return errors;
+}
+
+
+ModelActivations ModelLearn::ComputeActivations(const std::vector<float> input)
 {
     if (input.size() != m_model.m_inputSize) {
         fprintf(stderr, "Input size (%d) should be %d\n", input.size(), m_model.m_inputSize);
@@ -192,14 +172,14 @@ ModelLearnData ModelLearn::ApplyForLearn(const std::vector<float> input)
         return sigmoidFunc(x + bias);
     };
     
-    ModelLearnData data;
-    data.LayerDatas.reserve(m_model.m_layers.size() + 1);
+    ModelActivations data;
+    data.Layers.reserve(m_model.m_layers.size() + 1);
 
     // Store a_i for input layer
-    LayerLearnData inputLayerData;
+    LayerActivations inputLayerData;
     inputLayerData.LayerSize = input.size();
-    inputLayerData.A = input;
-    data.LayerDatas.push_back(std::move(inputLayerData));
+    inputLayerData.Activations = input;
+    data.Layers.push_back(std::move(inputLayerData));
 
     std::vector<float> prevLayerResults = input;
 
@@ -212,18 +192,18 @@ ModelLearnData ModelLearn::ApplyForLearn(const std::vector<float> input)
             }
         }
 
-        LayerLearnData layerData;
+        LayerActivations layerData;
         layerData.LayerSize = layer.Size;
-        layerData.Z.resize(layer.Size);
-        layerData.A.resize(layer.Size);
+        layerData.PreActivations.resize(layer.Size);
+        layerData.Activations.resize(layer.Size);
 
         for (int i = 0; i < currResults.size(); i++) {
-            layerData.Z[i] = currResults[i] + layer.Biases[i];
+            layerData.PreActivations[i] = currResults[i] + layer.Biases[i];
             currResults[i] = transformFunc(currResults[i], layer.Biases[i]);
-            layerData.A[i] = currResults[i];
+            layerData.Activations[i] = currResults[i];
         }
 
-        data.LayerDatas.push_back(std::move(layerData));
+        data.Layers.push_back(std::move(layerData));
         prevLayerResults = std::move(currResults);
     }
 
@@ -231,26 +211,29 @@ ModelLearnData ModelLearn::ApplyForLearn(const std::vector<float> input)
 }
 
 
-std::vector<ModelLayer> ModelLearn::ComputeGradient(const ModelLearnData& data, const std::vector<std::vector<float>>& layerErrors) const
-{
-    std::vector<ModelLayer> gradient;
-    gradient.reserve(m_model.m_layers.size());
+ModelGradient ModelLearn::ComputeGradient(
+    const ModelActivations& data, const Matrix<float>& layerErrors) const
+{    
+    const auto& modelLayers = m_model.m_layers;
+    
+    ModelGradient gradient;
+    gradient.Layers.reserve(modelLayers.size());
 
-    for (int i = 0; i < m_model.m_layers.size(); i++) {
-        ModelLayer layer(m_model.m_layers[i].Size, m_model.m_layers[i].PrevLayerSize);
+    for (int layerIndex = 0; layerIndex < modelLayers.size(); layerIndex++) {
+        ModelLayer layer(modelLayers[layerIndex].Size, modelLayers[layerIndex].PrevLayerSize);
         
-        for (int j = 0; j < layer.Size; j++) {
-            layer.Biases[j] = layerErrors[i][j];
+        for (int i = 0; i < layer.Size; i++) {
+            layer.Biases[i] = layerErrors[layerIndex][i];
         }
 
-        const auto& prevLayer = data.LayerDatas[i];
-        for (int j = 0; j < layer.PrevLayerSize; j++) {
-            for (int k = 0; k < layer.Size; k++) {
-                layer.WeightAt(j, k) = prevLayer.A[j] * layerErrors[i][k];
+        const auto& prevLayer = data.Layers[layerIndex];
+        for (int i = 0; i < layer.PrevLayerSize; i++) {
+            for (int j = 0; j < layer.Size; j++) {
+                layer.WeightAt(i, j) = prevLayer.Activations[i] * layerErrors[layerIndex][j];
             }
         }
 
-        gradient.push_back(std::move(layer));
+        gradient.Layers.push_back(std::move(layer));
     }
 
     return gradient;
@@ -259,11 +242,11 @@ std::vector<ModelLayer> ModelLearn::ComputeGradient(const ModelLearnData& data, 
 
 float ModelLearn::GetMSELoss(const Pool& pool) const
 {    
-    auto lossFunc = [](std::vector<float> sol, std::vector<float> properSol) -> float {
+    auto lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
         float sum = 0.0f;
 
         for (int i = 0; i < sol.size(); i++) {
-            sum += std::pow(sol[i] - properSol[i], 2);
+            sum += std::pow(sol[i] - correctSol[i], 2);
         }
 
         return sum;

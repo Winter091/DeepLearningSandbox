@@ -5,19 +5,28 @@
 #include "Model.hpp"
 
 
-struct LayerLearnData
+struct LayerActivations
 {
     std::size_t LayerSize;
-    std::vector<float> Z;
-    std::vector<float> A;
+    std::vector<float> PreActivations;
+    std::vector<float> Activations;
 };
 
 
-struct ModelLearnData
+struct ModelActivations
 {
-    std::uint8_t target;
-    std::vector<LayerLearnData> LayerDatas;
+    std::vector<LayerActivations> Layers;
 };
+
+
+struct ModelGradient
+{
+    std::vector<ModelLayer> Layers;
+};
+
+
+template <typename T>
+using Matrix = std::vector<std::vector<T>>;
 
 
 class ModelLearn
@@ -32,16 +41,16 @@ private:
 
     void DoLearnIteration(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
 
-    ModelLearnData ApplyForLearn(const std::vector<float> input);
+    ModelActivations ComputeActivations(const std::vector<float> input);
 
-    std::vector<std::vector<float>> ComputeErrors(const ModelLearnData& data) const;
-    std::vector<float> ComputeOutputLayerErrors(const ModelLearnData& data) const;
-    std::vector<std::vector<float>> ComputePrevLayersErrors(
-        const ModelLearnData& data, 
-        const std::vector<float>& resultLayerErrors
-    ) const;
+    Matrix<float> ComputeErrors(
+        const ModelActivations& activations, uint8_t target) const;
 
-    std::vector<ModelLayer> ComputeGradient(const ModelLearnData& data, const std::vector<std::vector<float>>& layerErrors) const;
+    std::vector<float> ComputeOutputLayerErrors(
+        const ModelActivations& activations, uint8_t target) const;
+
+    ModelGradient ComputeGradient(
+        const ModelActivations& activations, const Matrix<float>& layerErrors) const;
 
     float GetMSELoss(const Pool& pool) const;
 
