@@ -11,5 +11,6 @@ add_executable(
     Source/main.cpp
     Source/Pool.cpp
     Source/Model.cpp
+    Source/ModelLearn.cpp
     Source/ModelVisualizer.cpp
 )

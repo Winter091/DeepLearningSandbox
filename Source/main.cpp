@@ -28,7 +28,7 @@ int main()
 
     LearnParams p;
     p.BatchSize = 100;
-    p.NumIters = 1000;
+    p.NumIters = 100;
     model.Fit(trainPool, testPool, p);
 
     input = testPool.GetElements()[0].Features;
