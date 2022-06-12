@@ -17,16 +17,24 @@ int main()
     model.AddLayer(16);
     model.AddLayer(10);
 
-    auto input = trainPool.GetElements()[0].Features;
+    auto input = testPool.GetElements()[0].Features;
     std::vector<float> res = model.Apply(input);
     for (float elem : res) {
         printf("%.2f ", elem);
     }
     printf("\n");
 
-    printf("MSE loss: %.2f\n", model.GetMSELoss(testPool));
+    LearnParams p;
+    p.BatchSize = 100;
+    p.NumIters = 1000;
+    model.Fit(trainPool, testPool, p);
 
-    LayerToBmps(model.GetLayer(0), "Resources/Visualizations");
+    input = testPool.GetElements()[0].Features;
+    res = model.Apply(input);
+    for (float elem : res) {
+        printf("%.2f ", elem);
+    }
+    printf("\nTarget: %d\n", testPool.GetElements()[0].Target);
 
     return 0;
 }

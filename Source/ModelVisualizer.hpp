@@ -6,7 +6,7 @@
 #include <string>
 
 
-void LayerToBmps(const ModelLayer& layer, const std::string& basePath);
+void LayerToBmps(const ModelLayer& layer, const std::string& basePath, int index);
 
 
 #endif

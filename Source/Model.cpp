@@ -5,6 +5,8 @@
 #include <random>
 #include <algorithm>
 
+#include "ModelVisualizer.hpp"
+
 
 Model::Model()
     : m_e2(std::random_device()())
@@ -92,8 +94,10 @@ std::vector<float> Model::Apply(const std::vector<float>& input) const
 
 void Model::Fit(const Pool& learnPool, const Pool& testPool, const LearnParams& params)
 {
-    for (int i = 0; i < params.NumIters; i++) {
+    for (int i = 0; i < 100000000; i++) {
+        printf("Iteration %3d: mse loss = ", i);
         DoLearnIteration(learnPool, testPool, params);
+        printf("%.3f\n", GetMSELoss(testPool));
     }
 }
 
@@ -136,6 +140,15 @@ void Model::DoLearnIteration(const Pool& learnPool, const Pool& testPool, const 
         }
     }
 
+    for (int i = 0; i < batchGradient.size(); i++) {
+        //printf("\tLayer #%d:\tBiases:\n", i);
+        auto& layer = batchGradient[i];
+
+        for (int j = 0; j < layer.Biases.size(); j++) {
+            //printf("\t%.3f ", layer.Biases[j]);
+        }
+    }
+
     for (int layerNum = 0; layerNum < batchGradient.size(); layerNum++) {
         auto& layer = batchGradient[layerNum];
 
@@ -153,7 +166,7 @@ void Model::DoLearnIteration(const Pool& learnPool, const Pool& testPool, const 
     // Apply antigradient
     for (int layerNum = 0; layerNum < batchGradient.size(); layerNum++) {
         auto& gradientLayer = batchGradient[layerNum];
-        auto& modelLayer = m_layers[layerNum + 1];
+        auto& modelLayer = m_layers[layerNum];
 
         for (int i = 0; i < modelLayer.Biases.size(); i++) {
             modelLayer.Biases[i] -= gradientLayer.Biases[i];
@@ -202,7 +215,7 @@ std::vector<std::vector<float>> Model::ComputePrevLayersErrors(
     const std::vector<float>& resultLayerErrors) const 
 {
     std::vector<std::vector<float>> result;
-    result.reserve(data.LayerDatas.size());
+    result.reserve(m_layers.size());
     result.push_back(resultLayerErrors);
 
     auto sigmoidDerivative = [](float x) -> float {
@@ -210,19 +223,21 @@ std::vector<std::vector<float>> Model::ComputePrevLayersErrors(
     };
 
     const std::vector<float>* nextLayerErrors = &resultLayerErrors;
-    for (int i = data.LayerDatas.size() - 2; i >= 0; i--) {
+    for (int i = m_layers.size() - 2; i >= 0; i--) {
 
         auto& nextLayer = m_layers[i + 1];
-        std::vector<float> currLayerErrors(data.LayerDatas[i].LayerSize);
+
+        std::vector<float> currLayerErrors(m_layers[i].Size);
 
         for (int j = 0; j < currLayerErrors.size(); j++) {
 
             float sum = 0.0f;
-            for (int k = 0; k < data.LayerDatas[i + 1].LayerSize; k++) {
+            for (int k = 0; k < nextLayerErrors->size(); k++) {
                 sum += (nextLayer.WeightAt(j, k) * nextLayerErrors->at(k));
             }
 
-            float z = data.LayerDatas[i].Z[j];
+            // i + 1 because input layer is also stored in LayerDatas
+            float z = data.LayerDatas[i + 1].Z[j];
             currLayerErrors[j] = sigmoidDerivative(z) * sum;
 
         }
@@ -234,8 +249,9 @@ std::vector<std::vector<float>> Model::ComputePrevLayersErrors(
 
     std::vector<std::vector<float>> reversedResult;
     reversedResult.reserve(result.size());
-    for (int i = 0; i <= result.size(); i++) {
-        reversedResult[i] = std::move(result[result.size() - 1 - i]);
+    for (int i = 0; i < result.size(); i++) {
+        std::vector<float> a = std::move(result[result.size() - 1 - i]);
+        reversedResult.push_back(std::move(a));
     }
 
     return reversedResult;
@@ -263,8 +279,13 @@ ModelLearnData Model::ApplyForLearn(const std::vector<float> input)
     };
     
     ModelLearnData data;
-    // Input layer is not required
-    data.LayerDatas.reserve(m_layers.size() - 1);
+    data.LayerDatas.reserve(m_layers.size() + 1);
+
+    // Store a_i for input layer
+    LayerLearnData inputLayerData;
+    inputLayerData.LayerSize = input.size();
+    inputLayerData.A = input;
+    data.LayerDatas.push_back(std::move(inputLayerData));
 
     std::vector<float> prevLayerResults = input;
 
@@ -299,22 +320,26 @@ ModelLearnData Model::ApplyForLearn(const std::vector<float> input)
 std::vector<ModelLayer> Model::ComputeGradient(const ModelLearnData& data, const std::vector<std::vector<float>>& layerErrors) const
 {
     std::vector<ModelLayer> gradient;
-    // Input layer is not required
-    gradient.reserve(m_layers.size() - 1);
+    gradient.reserve(m_layers.size());
 
-    for (int i = 1; i < m_layers.size(); i++) {
+    for (int i = 0; i < m_layers.size(); i++) {
         ModelLayer layer(m_layers[i].Size, m_layers[i].PrevLayerSize);
         
         for (int j = 0; j < layer.Size; j++) {
             layer.Biases[j] = layerErrors[i][j];
         }
 
-        const auto& prevLayer = data.LayerDatas[i - 1];
+        const auto& prevLayer = data.LayerDatas[i];
         for (int j = 0; j < layer.PrevLayerSize; j++) {
             for (int k = 0; k < layer.Size; k++) {
                 layer.WeightAt(j, k) = prevLayer.A[j] * layerErrors[i][k];
+                if (prevLayer.A[j] != 0.0f || prevLayer.A[j] != -0.0f) {
+                    int a = 2+3;
+                }
             }
         }
+
+        gradient.push_back(std::move(layer));
     }
 
     return gradient;

@@ -35,7 +35,7 @@ static void CreateBmp(const ModelLayer& layer, std::size_t index, const std::str
 }
 
 
-void LayerToBmps(const ModelLayer& layer, const std::string& folder)
+void LayerToBmps(const ModelLayer& layer, const std::string& folder, int index)
 {
     for (int i = 0; i < layer.Size; i++) {
         std::filesystem::path path(folder);
