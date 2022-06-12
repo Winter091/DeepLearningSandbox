@@ -3,6 +3,7 @@
 
 
 #include "Model.hpp"
+#include <algorithm>
 
 
 struct LayerActivations
@@ -22,6 +23,41 @@ struct ModelActivations
 struct ModelGradient
 {
     std::vector<ModelLayer> Layers;
+
+    ModelGradient& operator+=(const ModelGradient& other)
+    {
+        for (int layerIndex = 0; layerIndex < Layers.size(); layerIndex++) {
+            auto& thisLayer = Layers[layerIndex];
+            auto& otherLayer = other.Layers[layerIndex];
+
+            for (int i = 0; i < thisLayer.Weights.size(); i++) {
+                thisLayer.Weights[i] += otherLayer.Weights[i];
+            }
+
+            for (int i = 0; i < thisLayer.Biases.size(); i++) {
+                thisLayer.Biases[i] += otherLayer.Biases[i];
+            }
+        }
+
+        return *this;
+    }
+
+    ModelGradient& operator/=(float scalar)
+    {
+        for (int layerIndex = 0; layerIndex < Layers.size(); layerIndex++) {
+            auto& layer = Layers[layerIndex];
+
+            for (int i = 0; i < layer.Biases.size(); i++) {
+                layer.Biases[i] /= scalar;
+            }
+
+            for (int i = 0; i < layer.Weights.size(); i++) {
+                layer.Weights[i] /= scalar;
+            }
+        }
+
+        return *this;
+    }
 };
 
 
@@ -41,7 +77,7 @@ private:
 
     void DoLearnIteration(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
 
-    ModelActivations ComputeActivations(const std::vector<float> input);
+    ModelActivations ComputeActivations(const std::vector<float>& input) const;
 
     Matrix<float> ComputeErrors(
         const ModelActivations& activations, uint8_t target) const;
@@ -51,6 +87,8 @@ private:
 
     ModelGradient ComputeGradient(
         const ModelActivations& activations, const Matrix<float>& layerErrors) const;
+
+    void ApplyGradient(const ModelGradient& gradient);
 
     float GetMSELoss(const Pool& pool) const;
 

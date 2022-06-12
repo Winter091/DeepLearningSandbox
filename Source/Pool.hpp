@@ -20,6 +20,7 @@ public:
     template <typename T>
     Pool(T&& elements)
         : m_elements(std::forward<T>(elements))
+        , m_size(m_elements.size())
     {}
 
     std::size_t GetSize() const { return m_size; }
@@ -28,8 +29,8 @@ public:
     Pool TakeRandom(std::size_t amount) const;
 
 private:
-    std::size_t m_size = 0;
     std::vector<PoolElement> m_elements;
+    std::size_t m_size = 0;
 
 private:
     void ParseLabelsFile(const char* labelsFile);

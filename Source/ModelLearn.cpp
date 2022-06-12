@@ -19,65 +19,25 @@ void ModelLearn::Fit(const Pool& learnPool, const Pool& testPool, const LearnPar
 void ModelLearn::DoLearnIteration(
     const Pool& learnPool, const Pool& testPool, const LearnParams& params)
 {
-    // Create batch to learn on
-    // Apply model, remembering z^l and a^l
-    // Compute error in the ouput layer
-    // Compute error on previous layers
-    // Having errors, compute gradient vector
-
     Pool batchLearnPool = learnPool.TakeRandom(params.BatchSize);
     ModelGradient avgGradient;
 
-    for (const auto& element : batchLearnPool.GetElements()) {
+    for (int i = 0; i < batchLearnPool.GetElements().size(); i++) {
+        const auto& element = batchLearnPool.GetElements()[i];
+
         ModelActivations activations = ComputeActivations(element.Features);
-
         Matrix<float> errors = ComputeErrors(activations, element.Target);
-
         ModelGradient gradient = ComputeGradient(activations, errors);
-        if (avgGradient.Layers.empty()) {
+
+        if (i == 0) {
             avgGradient = std::move(gradient);
-            continue;
-        }
-        
-        for (int layerNum = 0; layerNum < gradient.Layers.size(); layerNum++) {
-            auto& resLayer = avgGradient.Layers[layerNum];
-            auto& thisLayer = gradient.Layers[layerNum];
-
-            for (int i = 0; i < thisLayer.Biases.size(); i++) {
-                resLayer.Biases[i] += thisLayer.Biases[i];
-            }
-
-            for (int i = 0; i < thisLayer.Weights.size(); i++) {
-                resLayer.Weights[i] += thisLayer.Weights[i];
-            }
+        } else {
+            avgGradient += gradient;
         }
     }
 
-    for (int layerNum = 0; layerNum < avgGradient.Layers.size(); layerNum++) {
-        auto& layer = avgGradient.Layers[layerNum];
-
-        for (int i = 0; i < layer.Biases.size(); i++) {
-            layer.Biases[i] /= params.BatchSize;
-        }
-
-        for (int i = 0; i < layer.Weights.size(); i++) {
-            layer.Weights[i] /= params.BatchSize;
-        }
-    }
-
-    // Apply antigradient
-    for (int layerNum = 0; layerNum < avgGradient.Layers.size(); layerNum++) {
-        auto& gradientLayer = avgGradient.Layers[layerNum];
-        auto& modelLayer = m_model.m_layers[layerNum];
-
-        for (int i = 0; i < modelLayer.Biases.size(); i++) {
-            modelLayer.Biases[i] -= gradientLayer.Biases[i];
-        }
-
-        for (int i = 0; i < modelLayer.Weights.size(); i++) {
-            modelLayer.Weights[i] -= gradientLayer.Weights[i];
-        }
-    }
+    avgGradient /= batchLearnPool.GetSize();
+    ApplyGradient(avgGradient);
 }
 
 
@@ -86,21 +46,17 @@ Matrix<float> ModelLearn::ComputeErrors(
 {
     Matrix<float> result;
     result.reserve(m_model.m_layers.size());
-
-    std::vector<float> outputLayerErrors = ComputeOutputLayerErrors(activations, target);
-    result.push_back(std::move(outputLayerErrors));
+    result.push_back(ComputeOutputLayerErrors(activations, target));
 
     auto sigmoidDerivative = [](float x) -> float {
         return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
     };
 
-    const std::vector<float>* nextLayerErrors = &outputLayerErrors;
     for (int i = m_model.m_layers.size() - 2; i >= 0; i--) {
-
+        auto* nextLayerErrors = &result.back();
         auto& nextLayer = m_model.m_layers[i + 1];
 
         std::vector<float> currLayerErrors(m_model.m_layers[i].Size);
-
         for (int j = 0; j < currLayerErrors.size(); j++) {
 
             float sum = 0.0f;
@@ -108,24 +64,15 @@ Matrix<float> ModelLearn::ComputeErrors(
                 sum += (nextLayer.WeightAt(j, k) * nextLayerErrors->at(k));
             }
 
-            // i + 1 because input layer is also stored in LayerDatas
             float z = activations.Layers[i + 1].PreActivations[j];
             currLayerErrors[j] = sigmoidDerivative(z) * sum;
         }
 
         result.push_back(std::move(currLayerErrors));
-        nextLayerErrors = &result.back();
-
     }
 
-    Matrix<float> reversedResult;
-    reversedResult.reserve(result.size());
-    for (int i = 0; i < result.size(); i++) {
-        std::vector<float> a = std::move(result[result.size() - 1 - i]);
-        reversedResult.push_back(std::move(a));
-    }
-
-    return reversedResult;
+    std::reverse(result.begin(), result.end());
+    return result;
 }
 
 
@@ -141,18 +88,22 @@ std::vector<float> ModelLearn::ComputeOutputLayerErrors(
         return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
     };
 
+    auto mseDerivative = [](float a, float y) -> float {
+        return 2.0f * (a - y);
+    };
+
     for (int i = 0; i < errors.size(); i++) {
         float a = data.Layers.back().Activations[i];
         float y = correctSolution[i];
         float z = data.Layers.back().PreActivations[i];
-        errors[i] = (2.0f * (a - y)) * sigmoidDerivative(z);
+        errors[i] = mseDerivative(a, y) * sigmoidDerivative(z);
     }
 
     return errors;
 }
 
 
-ModelActivations ModelLearn::ComputeActivations(const std::vector<float> input)
+ModelActivations ModelLearn::ComputeActivations(const std::vector<float>& input) const
 {
     if (input.size() != m_model.m_inputSize) {
         fprintf(stderr, "Input size (%d) should be %d\n", input.size(), m_model.m_inputSize);
@@ -167,28 +118,23 @@ ModelActivations ModelLearn::ComputeActivations(const std::vector<float> input)
     auto sigmoidFunc = [](float x) -> float {
         return 1.0f / (1.0f + std::pow(M_E, -x));
     };
-
-    auto transformFunc = [&sigmoidFunc](float x, float bias) -> float {
-        return sigmoidFunc(x + bias);
-    };
     
-    ModelActivations data;
-    data.Layers.reserve(m_model.m_layers.size() + 1);
+    ModelActivations activations;
+    activations.Layers.reserve(m_model.m_layers.size() + 1);
 
-    // Store a_i for input layer
-    LayerActivations inputLayerData;
-    inputLayerData.LayerSize = input.size();
-    inputLayerData.Activations = input;
-    data.Layers.push_back(std::move(inputLayerData));
+    LayerActivations inputLayerActivations;
+    inputLayerActivations.LayerSize = input.size();
+    inputLayerActivations.Activations = input;
+    activations.Layers.push_back(std::move(inputLayerActivations));
 
-    std::vector<float> prevLayerResults = input;
+    std::vector<float> prevLayerActivations = input;
 
     for (const auto& layer : m_model.m_layers) {
-        std::vector<float> currResults(layer.Size, 0.0f);
+        std::vector<float> layerResults(layer.Size, 0.0f);
 
         for (int i = 0; i < layer.PrevLayerSize; i++) {
             for (int j = 0; j < layer.Size; j++) {
-                currResults[j] += (prevLayerResults[i] * layer.WeightAt(i, j));
+                layerResults[j] += (prevLayerActivations[i] * layer.WeightAt(i, j));
             }
         }
 
@@ -197,17 +143,17 @@ ModelActivations ModelLearn::ComputeActivations(const std::vector<float> input)
         layerData.PreActivations.resize(layer.Size);
         layerData.Activations.resize(layer.Size);
 
-        for (int i = 0; i < currResults.size(); i++) {
-            layerData.PreActivations[i] = currResults[i] + layer.Biases[i];
-            currResults[i] = transformFunc(currResults[i], layer.Biases[i]);
-            layerData.Activations[i] = currResults[i];
+        for (int i = 0; i < layerResults.size(); i++) {
+            layerData.PreActivations[i] = layerResults[i] + layer.Biases[i];
+            layerResults[i] = sigmoidFunc(layerResults[i] + layer.Biases[i]);
+            layerData.Activations[i] = layerResults[i];
         }
 
-        data.Layers.push_back(std::move(layerData));
-        prevLayerResults = std::move(currResults);
+        activations.Layers.push_back(std::move(layerData));
+        prevLayerActivations = std::move(layerResults);
     }
 
-    return data;
+    return activations;
 }
 
 
@@ -237,6 +183,23 @@ ModelGradient ModelLearn::ComputeGradient(
     }
 
     return gradient;
+}
+
+
+void ModelLearn::ApplyGradient(const ModelGradient& gradient)
+{
+    for (int layerIndex = 0; layerIndex < gradient.Layers.size(); layerIndex++) {
+        auto& gradientLayer = gradient.Layers[layerIndex];
+        auto& modelLayer = m_model.m_layers[layerIndex];
+
+        for (int i = 0; i < modelLayer.Biases.size(); i++) {
+            modelLayer.Biases[i] -= gradientLayer.Biases[i];
+        }
+
+        for (int i = 0; i < modelLayer.Weights.size(); i++) {
+            modelLayer.Weights[i] -= gradientLayer.Weights[i];
+        }
+    }
 }
 
 
