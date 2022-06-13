@@ -44,7 +44,7 @@ void Model::AddLayerImpl(std::size_t size, std::size_t prevLayerSize)
     }
 
     for (std::size_t i = 0; i < size; i++) {
-        layer.Biases[i] = 10.0f * m_random(m_e2);
+        layer.Biases[i] = m_random(m_e2);
     }
 
     m_layers.push_back(std::move(layer));

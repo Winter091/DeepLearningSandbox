@@ -6,6 +6,10 @@
 #include <algorithm>
 
 
+template <typename T>
+using Matrix = std::vector<std::vector<T>>;
+
+
 struct LayerActivations
 {
     std::size_t LayerSize;
@@ -61,10 +65,6 @@ struct ModelGradient
 };
 
 
-template <typename T>
-using Matrix = std::vector<std::vector<T>>;
-
-
 class ModelLearn
 {
 public:
@@ -75,7 +75,9 @@ public:
 private:
     friend class Model;
 
-    void DoLearnIteration(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
+    void SetupParams(const LearnParams& params);
+
+    void DoLearnIteration(const Pool& learnPool, const Pool& testPool);
 
     ModelActivations ComputeActivations(const std::vector<float>& input) const;
 
@@ -90,10 +92,18 @@ private:
 
     void ApplyGradient(const ModelGradient& gradient);
 
-    float GetMSELoss(const Pool& pool) const;
+    float GetPoolLoss(const Pool& pool) const;
 
 private:
     Model& m_model;
+
+    LearnParams m_learnParams;
+
+    std::function<float(const std::vector<float>&, const std::vector<float>)> m_lossFunc;
+    std::function<float(float, float)> m_lossFuncDerivative;
+
+    std::function<float(float)> m_activationFunc;
+    std::function<float(float)> m_activationFuncDerivative;
 };
 
 

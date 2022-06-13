@@ -17,7 +17,7 @@ int main()
     model.AddLayer(16);
     model.AddLayer(10);
 
-    ModelVisualizer::DumpLayerToBmps(model.GetLayer(0), "Resources/Visualizations");
+    ModelVisualizer::DumpLayerToBmps(model.GetLayer(0), "Resources/Pre");
 
     auto input = testPool.GetElements()[0].Features;
     std::vector<float> res = model.Apply(input);
@@ -26,10 +26,13 @@ int main()
     }
     printf("\n");
 
-    LearnParams p;
-    p.BatchSize = 100;
-    p.NumIters = 100;
-    model.Fit(trainPool, testPool, p);
+    model.Fit(trainPool, testPool, {
+        .NumIters = 10000,
+        .BatchSize = 32,
+        .LearnRate = 2.0f,
+        .lossFunc = LossFunc::MeanSquaredError,
+        .activationFunc = ActivationFunc::Sigmoid,
+    });
 
     input = testPool.GetElements()[0].Features;
     res = model.Apply(input);
@@ -37,6 +40,8 @@ int main()
         printf("%.2f ", elem);
     }
     printf("\nTarget: %d\n", testPool.GetElements()[0].Target);
+
+    ModelVisualizer::DumpLayerToBmps(model.GetLayer(0), "Resources/Post");
 
     return 0;
 }

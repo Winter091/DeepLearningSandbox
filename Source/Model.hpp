@@ -9,10 +9,25 @@
 #include "Pool.hpp"
 
 
+enum class LossFunc : uint8_t
+{
+    MeanSquaredError = 0,
+};
+
+
+enum class ActivationFunc : uint8_t
+{
+    Sigmoid = 0,
+};
+
+
 struct LearnParams
 {
     std::size_t NumIters;
     std::size_t BatchSize;
+    float LearnRate;
+    LossFunc lossFunc;
+    ActivationFunc activationFunc;
 };
 
 

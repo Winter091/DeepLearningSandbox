@@ -8,18 +8,73 @@ ModelLearn::ModelLearn(Model& model)
 
 void ModelLearn::Fit(const Pool& learnPool, const Pool& testPool, const LearnParams& params)
 {
-    for (int i = 0; i < params.NumIters; i++) {
-        printf("Iteration %3d: mse loss = ", i);
-        DoLearnIteration(learnPool, testPool, params);
-        printf("%.3f\n", GetMSELoss(testPool));
+    SetupParams(params);
+    
+    for (int i = 0; i < m_learnParams.NumIters; i++) {
+        printf("Iteration %3d: loss = ", i);
+        DoLearnIteration(learnPool, testPool);
+        printf("%.3f\n", GetPoolLoss(testPool));
+    }
+}
+
+void ModelLearn::SetupParams(const LearnParams& params)
+{
+    m_learnParams = params;
+
+    switch (params.lossFunc) {
+        case LossFunc::MeanSquaredError:
+        {
+            m_lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
+                float sum = 0.0f;
+
+                for (int i = 0; i < sol.size(); i++) {
+                    sum += std::pow(sol[i] - correctSol[i], 2);
+                }
+
+                return sum;
+            };
+
+            m_lossFuncDerivative = [](float a, float y) -> float {
+                return 2.0f * (a - y);
+            };
+
+            break;
+        }
+
+        default:
+        {
+            fprintf(stderr, "Unknown loss function: %u", static_cast<uint32_t>(params.lossFunc));
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    switch (params.activationFunc) {
+        case ActivationFunc::Sigmoid:
+        {
+            m_activationFunc = [](float x) -> float {
+                return 1.0f / (1.0f + std::pow(M_E, -x));
+            };
+
+            m_activationFuncDerivative = [](float x) -> float {
+                return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
+            };
+
+            break;
+        }
+
+        default:
+        {
+            fprintf(stderr, "Unknown activation function: %u", 
+                static_cast<uint32_t>(params.activationFunc));
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
 
-void ModelLearn::DoLearnIteration(
-    const Pool& learnPool, const Pool& testPool, const LearnParams& params)
+void ModelLearn::DoLearnIteration(const Pool& learnPool, const Pool& testPool)
 {
-    Pool batchLearnPool = learnPool.TakeRandom(params.BatchSize);
+    Pool batchLearnPool = learnPool.TakeRandom(m_learnParams.BatchSize);
     ModelGradient avgGradient;
 
     for (int i = 0; i < batchLearnPool.GetElements().size(); i++) {
@@ -48,10 +103,6 @@ Matrix<float> ModelLearn::ComputeErrors(
     result.reserve(m_model.m_layers.size());
     result.push_back(ComputeOutputLayerErrors(activations, target));
 
-    auto sigmoidDerivative = [](float x) -> float {
-        return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
-    };
-
     for (int i = m_model.m_layers.size() - 2; i >= 0; i--) {
         auto* nextLayerErrors = &result.back();
         auto& nextLayer = m_model.m_layers[i + 1];
@@ -65,7 +116,7 @@ Matrix<float> ModelLearn::ComputeErrors(
             }
 
             float z = activations.Layers[i + 1].PreActivations[j];
-            currLayerErrors[j] = sigmoidDerivative(z) * sum;
+            currLayerErrors[j] = m_activationFuncDerivative(z) * sum;
         }
 
         result.push_back(std::move(currLayerErrors));
@@ -84,19 +135,11 @@ std::vector<float> ModelLearn::ComputeOutputLayerErrors(
     std::vector<float> correctSolution(errors.size(), 0.0f);
     correctSolution[target] = 1.0f;
 
-    auto sigmoidDerivative = [](float x) -> float {
-        return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
-    };
-
-    auto mseDerivative = [](float a, float y) -> float {
-        return 2.0f * (a - y);
-    };
-
     for (int i = 0; i < errors.size(); i++) {
         float a = data.Layers.back().Activations[i];
         float y = correctSolution[i];
         float z = data.Layers.back().PreActivations[i];
-        errors[i] = mseDerivative(a, y) * sigmoidDerivative(z);
+        errors[i] = m_lossFuncDerivative(a, y) * m_activationFuncDerivative(z);
     }
 
     return errors;
@@ -114,10 +157,6 @@ ModelActivations ModelLearn::ComputeActivations(const std::vector<float>& input)
         fprintf(stderr, "Modes has no layers");
         exit(EXIT_FAILURE);
     }
-
-    auto sigmoidFunc = [](float x) -> float {
-        return 1.0f / (1.0f + std::pow(M_E, -x));
-    };
     
     ModelActivations activations;
     activations.Layers.reserve(m_model.m_layers.size() + 1);
@@ -145,7 +184,7 @@ ModelActivations ModelLearn::ComputeActivations(const std::vector<float>& input)
 
         for (int i = 0; i < layerResults.size(); i++) {
             layerData.PreActivations[i] = layerResults[i] + layer.Biases[i];
-            layerResults[i] = sigmoidFunc(layerResults[i] + layer.Biases[i]);
+            layerResults[i] = m_activationFunc(layerResults[i] + layer.Biases[i]);
             layerData.Activations[i] = layerResults[i];
         }
 
@@ -193,28 +232,18 @@ void ModelLearn::ApplyGradient(const ModelGradient& gradient)
         auto& modelLayer = m_model.m_layers[layerIndex];
 
         for (int i = 0; i < modelLayer.Biases.size(); i++) {
-            modelLayer.Biases[i] -= gradientLayer.Biases[i];
+            modelLayer.Biases[i] -= m_learnParams.LearnRate * gradientLayer.Biases[i];
         }
 
         for (int i = 0; i < modelLayer.Weights.size(); i++) {
-            modelLayer.Weights[i] -= gradientLayer.Weights[i];
+            modelLayer.Weights[i] -= m_learnParams.LearnRate * gradientLayer.Weights[i];
         }
     }
 }
 
 
-float ModelLearn::GetMSELoss(const Pool& pool) const
+float ModelLearn::GetPoolLoss(const Pool& pool) const
 {    
-    auto lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
-        float sum = 0.0f;
-
-        for (int i = 0; i < sol.size(); i++) {
-            sum += std::pow(sol[i] - correctSol[i], 2);
-        }
-
-        return sum;
-    };
-    
     float loss = 0.0f;
 
     for (const PoolElement& element : pool.GetElements()) {
@@ -222,7 +251,7 @@ float ModelLearn::GetMSELoss(const Pool& pool) const
         std::vector<float> properSolution(solution.size(), 0.0f);
         properSolution[element.Target] = 1.0f;
 
-        loss += lossFunc(solution, properSolution);
+        loss += m_lossFunc(solution, properSolution);
     }
 
     return loss / pool.GetSize();
