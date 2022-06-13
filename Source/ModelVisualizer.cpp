@@ -5,8 +5,9 @@
 #include <cmath>
 
 
-static void CreateBmp(const ModelLayer& layer, std::size_t index, const std::string& path)
-{
+void ModelVisualizer::DumpElemToBmp(
+    const ModelLayer& layer, std::size_t layerElemIndex, const std::string& path)
+{    
     int width = std::round(std::sqrt(layer.PrevLayerSize));
     if (width * width < layer.PrevLayerSize) {
         ++width;
@@ -15,17 +16,24 @@ static void CreateBmp(const ModelLayer& layer, std::size_t index, const std::str
     bitmap_image image(width, width);
     image.set_all_channels(0, 0, 0);
 
-    for (int i = 0; i < layer.PrevLayerSize; i++) {
-        int x = i % width;
-        int y = i / width;
+    float maxAbsWeight = *std::max_element(layer.Weights.begin(), layer.Weights.end(), 
+        [](float a, float b) {
+            return std::abs(a) < std::abs(b);
+        }
+    );
 
-        float weight = layer.WeightAt(i, index);
-        float coeff = std::abs(weight) / 2.0f;
-        int r = 0, g = 0, b = 0;
-        if (weight < 0) {
-            r = coeff * 255;
+    for (int i = 0; i < layer.PrevLayerSize; i++) {
+        uint32_t x = i % width;
+        uint32_t y = i / width;
+
+        float weight = layer.WeightAt(i, layerElemIndex);
+        float coeff = std::abs(weight / maxAbsWeight);
+
+        uint8_t r = 0, g = 0, b = 0;
+        if (weight < 0.0f) {
+            r = coeff * 255.0f;
         } else {
-            g = coeff * 255;
+            g = coeff * 255.0f;
         }
 
         image.set_pixel(x, y, r, g, b);
@@ -35,11 +43,11 @@ static void CreateBmp(const ModelLayer& layer, std::size_t index, const std::str
 }
 
 
-void LayerToBmps(const ModelLayer& layer, const std::string& folder)
+void ModelVisualizer::DumpLayerToBmps(const ModelLayer& layer, const std::string& folder)
 {
     for (int i = 0; i < layer.Size; i++) {
         std::filesystem::path path(folder);
-        path /= std::string("image_") + std::to_string(i) + std::string(".bmp");
-        CreateBmp(layer, i, path.string());
+        path /= std::string("weights_") + std::to_string(i) + std::string(".bmp");
+        DumpElemToBmp(layer, i, path.string());
     }
 }
