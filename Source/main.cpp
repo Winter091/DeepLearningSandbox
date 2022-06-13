@@ -27,11 +27,11 @@ int main()
     printf("\n");
 
     model.Fit(trainPool, testPool, {
-        .MaxIters = 100000,
-        .BatchSize = 128,
-        .DesiredLoss = 0.09f,
-        .LearnRate = 2.0f,
-        .lossFunc = LossFunc::MeanSquaredError,
+        .MaxIters = 1000000,
+        .BatchSize = 32,
+        .DesiredLoss = 0.39f,
+        .LearnRate = 0.7f,
+        .lossFunc = LossFunc::LogLoss,
         .activationFunc = ActivationFunc::Sigmoid,
     });
 

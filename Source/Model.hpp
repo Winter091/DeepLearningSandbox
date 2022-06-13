@@ -11,7 +11,8 @@
 
 enum class LossFunc : uint8_t
 {
-    MeanSquaredError = 0,
+    SquaredError = 0,
+    LogLoss,
 };
 
 

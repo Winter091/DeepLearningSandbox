@@ -30,7 +30,7 @@ void ModelLearn::SetupParams(const LearnParams& params)
     m_learnParams = params;
 
     switch (params.lossFunc) {
-        case LossFunc::MeanSquaredError:
+        case LossFunc::SquaredError:
         {
             m_lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
                 float sum = 0.0f;
@@ -44,6 +44,26 @@ void ModelLearn::SetupParams(const LearnParams& params)
 
             m_lossFuncDerivative = [](float a, float y) -> float {
                 return 2.0f * (a - y);
+            };
+
+            break;
+        }
+
+        case LossFunc::LogLoss:
+        {
+            m_lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
+                float sum = 0.0f;
+
+                for (int i = 0; i < sol.size(); i++) {
+                    sum += (correctSol[i]          * std::log(sol[i])) +
+                           ((1.0f - correctSol[i]) * std::log(1.0f - sol[i]));
+                }
+
+                return -sum;
+            };
+
+            m_lossFuncDerivative = [](float a, float y) -> float {
+                return (a - y) / (a * (1.0f - a));
             };
 
             break;
