@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector>
 #include <random>
+#include <functional>
 
 #include "Pool.hpp"
 
@@ -28,8 +29,6 @@ struct LearnParams
     std::size_t BatchSize;
     float DesiredLoss;
     float LearnRate;
-    LossFunc lossFunc;
-    ActivationFunc activationFunc;
 };
 
 
@@ -61,11 +60,16 @@ public:
     
     void AddLayer(std::size_t size);
     const ModelLayer& GetLayer(std::size_t index) const;
+
+    void SetLossFunc(LossFunc lossFunc);
+    void SetActivationFunc(ActivationFunc activationFunc);
     
     std::vector<float> Apply(const std::vector<float>& input) const;
 
-    void Fit(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
+    void SetupParams(const LearnParams& params);
 
+    void Fit(const Pool& learnPool, const Pool& testPool, const LearnParams& params);
+    float GetPoolLoss(const Pool& pool) const;
 
 private:
     friend class ModelLearn;
@@ -76,6 +80,11 @@ private:
     std::mt19937 m_e2;
     std::uniform_real_distribution<float> m_random;
 
+    std::function<float(const std::vector<float>&, const std::vector<float>)> m_lossFunc;
+    std::function<float(float, float)> m_lossFuncDerivative;
+
+    std::function<float(float)> m_activationFunc;
+    std::function<float(float)> m_activationFuncDerivative;
 
 private:
     void AddLayerImpl(std::size_t size, std::size_t prevLayerSize);

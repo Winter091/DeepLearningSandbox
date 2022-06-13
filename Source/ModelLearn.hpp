@@ -3,7 +3,6 @@
 
 
 #include "Model.hpp"
-#include <algorithm>
 
 
 template <typename T>
@@ -75,8 +74,6 @@ public:
 private:
     friend class Model;
 
-    void SetupParams(const LearnParams& params);
-
     void DoLearnIteration(const Pool& learnPool, const Pool& testPool);
 
     ModelActivations ComputeActivations(const std::vector<float>& input) const;
@@ -92,18 +89,9 @@ private:
 
     void ApplyGradient(const ModelGradient& gradient);
 
-    float GetPoolLoss(const Pool& pool) const;
-
 private:
     Model& m_model;
-
     LearnParams m_learnParams;
-
-    std::function<float(const std::vector<float>&, const std::vector<float>)> m_lossFunc;
-    std::function<float(float, float)> m_lossFuncDerivative;
-
-    std::function<float(float)> m_activationFunc;
-    std::function<float(float)> m_activationFuncDerivative;
 };
 
 

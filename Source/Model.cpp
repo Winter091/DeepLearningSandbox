@@ -12,7 +12,10 @@
 Model::Model()
     : m_e2(std::random_device()())
     , m_random(-1, 1)
-{}
+{
+    SetLossFunc(LossFunc::LogLoss);
+    SetActivationFunc(ActivationFunc::Sigmoid);
+}
 
 
 void Model::SetInputSize(std::size_t size)
@@ -62,14 +65,6 @@ std::vector<float> Model::Apply(const std::vector<float>& input) const
         fprintf(stderr, "Modes has no layers");
         exit(EXIT_FAILURE);
     }
-
-    auto sigmoidFunc = [](float x) -> float {
-        return 1.0f / (1.0f + std::pow(M_E, -x));
-    };
-
-    auto transformFunc = [&sigmoidFunc](float x, float bias) -> float {
-        return sigmoidFunc(x + bias);
-    };
     
     std::vector<float> prevLayerResults = input;
 
@@ -83,7 +78,7 @@ std::vector<float> Model::Apply(const std::vector<float>& input) const
         }
 
         for (int i = 0; i < currResults.size(); i++) {
-            currResults[i] = transformFunc(currResults[i], layer.Biases[i]);
+            currResults[i] = m_activationFunc(currResults[i] + layer.Biases[i]);
         }
 
         prevLayerResults = std::move(currResults);
@@ -100,6 +95,22 @@ void Model::Fit(const Pool& learnPool, const Pool& testPool, const LearnParams& 
 }
 
 
+float Model::GetPoolLoss(const Pool& pool) const
+{    
+    float loss = 0.0f;
+
+    for (const PoolElement& element : pool.GetElements()) {
+        const auto& solution = Apply(element.Features);
+        std::vector<float> properSolution(solution.size(), 0.0f);
+        properSolution[element.Target] = 1.0f;
+
+        loss += m_lossFunc(solution, properSolution);
+    }
+
+    return loss / pool.GetSize();
+}
+
+
 const ModelLayer& Model::GetLayer(std::size_t index) const 
 { 
     if (index >= m_layers.size()) {
@@ -110,3 +121,78 @@ const ModelLayer& Model::GetLayer(std::size_t index) const
     return m_layers[index];
 }
 
+
+void Model::SetLossFunc(LossFunc lossFunc)
+{
+    switch (lossFunc) {
+        case LossFunc::SquaredError:
+        {
+            m_lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
+                float sum = 0.0f;
+
+                for (int i = 0; i < sol.size(); i++) {
+                    sum += std::pow(sol[i] - correctSol[i], 2);
+                }
+
+                return sum;
+            };
+
+            m_lossFuncDerivative = [](float a, float y) -> float {
+                return 2.0f * (a - y);
+            };
+
+            break;
+        }
+
+        case LossFunc::LogLoss:
+        {
+            m_lossFunc = [](const std::vector<float>& sol, const std::vector<float>& correctSol) {
+                float sum = 0.0f;
+
+                for (int i = 0; i < sol.size(); i++) {
+                    sum += (correctSol[i]          * std::log(sol[i])) +
+                           ((1.0f - correctSol[i]) * std::log(1.0f - sol[i]));
+                }
+
+                return -sum;
+            };
+
+            m_lossFuncDerivative = [](float a, float y) -> float {
+                return (a - y) / (a * (1.0f - a));
+            };
+
+            break;
+        }
+
+        default:
+        {
+            fprintf(stderr, "Unknown loss function: %u", static_cast<uint32_t>(lossFunc));
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+
+void Model::SetActivationFunc(ActivationFunc activationFunc)
+{
+    switch (activationFunc) {
+        case ActivationFunc::Sigmoid:
+        {
+            m_activationFunc = [](float x) -> float {
+                return 1.0f / (1.0f + std::pow(M_E, -x));
+            };
+
+            m_activationFuncDerivative = [](float x) -> float {
+                return std::pow(M_E, -x) / std::pow(1 + std::pow(M_E, -x), 2);
+            };
+
+            break;
+        }
+
+        default:
+        {
+            fprintf(stderr, "Unknown activation function: %u", static_cast<uint32_t>(activationFunc));
+            exit(EXIT_FAILURE);
+        }
+    }
+}

@@ -16,6 +16,8 @@ int main()
     model.AddLayer(16);
     model.AddLayer(16);
     model.AddLayer(10);
+    model.SetLossFunc(LossFunc::LogLoss);
+    model.SetActivationFunc(ActivationFunc::Sigmoid);
 
     ModelVisualizer::DumpLayerToBmps(model.GetLayer(0), "Resources/Pre");
 
@@ -31,8 +33,6 @@ int main()
         .BatchSize = 32,
         .DesiredLoss = 0.39f,
         .LearnRate = 0.7f,
-        .lossFunc = LossFunc::LogLoss,
-        .activationFunc = ActivationFunc::Sigmoid,
     });
 
     input = testPool.GetElements()[0].Features;
