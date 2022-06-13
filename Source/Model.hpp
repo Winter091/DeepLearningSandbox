@@ -23,8 +23,9 @@ enum class ActivationFunc : uint8_t
 
 struct LearnParams
 {
-    std::size_t NumIters;
+    std::size_t MaxIters;
     std::size_t BatchSize;
+    float DesiredLoss;
     float LearnRate;
     LossFunc lossFunc;
     ActivationFunc activationFunc;

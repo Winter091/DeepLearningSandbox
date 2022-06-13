@@ -10,10 +10,18 @@ void ModelLearn::Fit(const Pool& learnPool, const Pool& testPool, const LearnPar
 {
     SetupParams(params);
     
-    for (int i = 0; i < m_learnParams.NumIters; i++) {
-        printf("Iteration %3d: loss = ", i);
+    printf("Iteration %3d: loss = %.3f\n", 0, GetPoolLoss(testPool));
+
+    for (int i = 1; i <= m_learnParams.MaxIters; i++) {
         DoLearnIteration(learnPool, testPool);
-        printf("%.3f\n", GetPoolLoss(testPool));
+
+        if (i % 25 == 0) {
+            float loss = GetPoolLoss(testPool);
+            printf("Iteration %3d: loss = %.3f\n", i, loss);
+            if (loss < params.DesiredLoss) {
+                break;
+            }
+        }
     }
 }
 
